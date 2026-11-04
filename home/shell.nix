@@ -1,17 +1,23 @@
-{ config, lib, ... }:
+{ config, lib, pkgs, ... }:
 {
   programs.zsh = {
     enable = true;
     enableCompletion = true;
-    autosuggestion.enable = true;
+    autosuggestion = {
+      enable = true;
+      highlight = "fg=#8087a2"; # Catppuccin overlay1
+    };
     syntaxHighlighting.enable = true;
-    defaultKeymap = "emacs";
+    defaultKeymap = "viins";
 
     history = {
-      size = 50000;
-      save = 50000;
+      size = 1000000;
+      save = 1000000;
       path = "${config.xdg.stateHome}/zsh/history";
       ignoreDups = true;
+      ignoreAllDups = true;
+      saveNoDups = true;
+      findNoDups = true;
       ignoreSpace = true;
       share = true;
       extended = true;
@@ -21,6 +27,13 @@
       cat = "bat --paging=never --style=plain";
       ff = "fastfetch";
       poke = "pokeget random --hide-name | fastfetch --file-raw -";
+      ".." = "cd ..";
+      "..." = "cd ../..";
+      grep = "rg --color=auto";
+      find = "fd";
+      lg = "lazygit";
+      c = "clear";
+      python = "python3";
     };
 
     # Belt and braces: Debian/Ubuntu zsh reads /etc/zsh/*, not the /etc/zshrc the
@@ -35,17 +48,66 @@
     initContent = lib.mkMerge [
       ''
         setopt AUTO_CD AUTO_PUSHD PUSHD_IGNORE_DUPS INTERACTIVE_COMMENTS
+        setopt COMPLETE_IN_WORD NO_BEEP NO_BG_NICE HIST_VERIFY
+
+        # `menu no` is required by fzf-tab: with `menu select` zsh draws its own
+        # menu and fzf-tab never takes over.
+        zstyle ':completion:*' menu no
         zstyle ':completion:*' matcher-list 'm:{a-z}={A-Za-z}'
-        zstyle ':completion:*' menu select
-        bindkey '^[[1;5C' forward-word
-        bindkey '^[[1;5D' backward-word
+        zstyle ':completion:*' list-colors "''${(s.:.)LS_COLORS}"
+        zstyle ':completion:*' list-separator '─'
+        zstyle ':completion:*' group-name '''
+        zstyle ':completion:*' format $'\e[1;38;2;183;189;248m── %d ──\e[0m'
+        zstyle ':completion:*:descriptions' format $'\e[1;38;2;183;189;248m%d\e[0m'
+
+        zstyle ':fzf-tab:complete:cd:*'         fzf-preview 'eza --tree --icons --color=always $realpath 2>/dev/null | head -50'
+        zstyle ':fzf-tab:complete:__zoxide_z:*' fzf-preview 'eza --tree --icons --color=always $realpath 2>/dev/null | head -50'
+        zstyle ':fzf-tab:complete:*'            fzf-preview 'bat --color=always $realpath 2>/dev/null | head -50'
+        zstyle ':fzf-tab:*' switch-group ',' '.'
+        zstyle ':fzf-tab:*' continuous-trigger '/'
+
+        ${builtins.readFile ./zsh/vi-mode.zsh}
+        ${builtins.readFile ./zsh/keyseq.zsh}
       ''
-      # Greeting: Pokémon + system info, once per login, never inside tmux.
+      # After vi-mode.zsh: autopair binds Backspace, which that file also sets.
+      # fzf-tab also has to follow fzf (910), which rebinds Tab, and precede
+      # syntax highlighting (1200), which wraps widgets.
+      (lib.mkOrder 1010 ''
+        source ${pkgs.zsh-fzf-tab}/share/fzf-tab/fzf-tab.plugin.zsh
+
+        source ${pkgs.zsh-autopair}/share/zsh/zsh-autopair/autopair.zsh
+
+        # fzf-git: Ctrl-G Ctrl-{B,T,H,R,S} for branches, tags, hashes, remotes, stashes.
+        source ${pkgs.fzf-git-sh}/share/fzf-git-sh/fzf-git.sh
+
+        # OMZ sudo: its default Esc-Esc collides with vi mode, so use Alt-s instead.
+        source ${pkgs.oh-my-zsh}/share/oh-my-zsh/plugins/sudo/sudo.plugin.zsh
+        bindkey -M viins '^[s' sudo-command-line
+        bindkey -M vicmd '^[s' sudo-command-line
+        bindkey -r -M viins '^[^['
+        bindkey -r -M vicmd '^[^['
+      '')
       (lib.mkAfter ''
-        if [[ -o interactive && -z "$TMUX" && -z "$DOTFILES_GREETED" && -t 1 ]]; then
+        # Claude Code snapshots this shell and replays it before every command,
+        # so undo what trades exactness for ergonomics. The rg config truncates
+        # long lines and changes what a search means; eza, bat, rg and fd aren't
+        # drop-in for ls, cat, grep and find; zoxide's self-check misfires on the
+        # replayed snapshot, printing a warning before each command.
+        if [[ -n "$CLAUDECODE" ]]; then
+          unset RIPGREP_CONFIG_PATH
+          unalias ls ll la lt lla cat grep find 2>/dev/null
+          export _ZO_DOCTOR=0
+        fi
+
+        # Greeting: Pokémon + system info, once per login, never inside tmux.
+        if [[ -o interactive && -z "$TMUX" && -z "$CLAUDECODE" && -z "$DOTFILES_GREETED" && -t 1 ]]; then
           export DOTFILES_GREETED=1
           pokeget random --hide-name 2>/dev/null | fastfetch --file-raw - 2>/dev/null || fastfetch
         fi
+      '')
+      # Machine-specific overrides, after everything (zoxide is 2000).
+      (lib.mkOrder 2100 ''
+        [[ -f "$HOME/.zshrc.local" ]] && source "$HOME/.zshrc.local"
       '')
     ];
   };
@@ -64,41 +126,13 @@
   programs.starship = {
     enable = true;
     enableZshIntegration = true;
-    settings = {
-      add_newline = false;
-      format = lib.concatStrings [
-        "$username"
-        "$hostname"
-        "$directory"
-        "$git_branch"
-        "$git_status"
-        "$nix_shell"
-        "$cmd_duration"
-        "$line_break"
-        "$character"
-      ];
-      # Always show user@host — it's the whole point on remote nodes.
-      username = {
-        show_always = true;
-        format = "[$user]($style)@";
-        style_user = "bold blue";
-        style_root = "bold red";
-      };
-      hostname = {
-        ssh_only = false;
-        format = "[$hostname]($style) ";
-        style = "bold green";
-      };
-      directory = {
-        truncation_length = 4;
-        truncate_to_repo = true;
-      };
-      cmd_duration.min_time = 2000;
-      nix_shell.format = "[❄ $name]($style) ";
-      character = {
-        success_symbol = "[❯](bold green)";
-        error_symbol = "[❯](bold red)";
-      };
-    };
+    settings = lib.importTOML ./files/starship.toml;
   };
+
+  # Completion for ~1000 CLIs, on top of whatever compsys already finds.
+  programs.carapace = {
+    enable = true;
+    enableZshIntegration = true;
+  };
+  home.sessionVariables.CARAPACE_BRIDGES = "zsh,fish,bash,inshellisense";
 }
