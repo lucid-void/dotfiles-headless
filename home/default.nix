@@ -63,11 +63,12 @@ in
     shfmt
   ];
 
-  # Tools installed outside Nix (Claude Code, cargo install, krew).
+  # Tools installed outside Nix (Claude Code, cargo install, krew, LM Studio).
   home.sessionPath = [
     "$HOME/.local/bin"
     "$HOME/.cargo/bin"
     "$HOME/.krew/bin"
+    "$HOME/.lmstudio/bin"
   ];
 
   home.sessionVariables = {

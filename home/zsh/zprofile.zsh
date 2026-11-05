@@ -1,0 +1,21 @@
+# ── Hyprland autologin ────────────────────────────────────────
+# Replaces what SDDM used to do: systemd autologins this user on tty1 — via
+# /etc/systemd/system/getty@tty1.service.d/autologin.conf, written by the desktop
+# repo's run_setup_autologin.sh — and this is what takes it from a bare shell prompt
+# the rest of the way into Hyprland. Neither half does anything alone.
+#
+# Guarded three ways: tty1 only (other VTs stay plain shells), no
+# WAYLAND_DISPLAY (never re-exec from inside a session Hyprland already
+# started, e.g. a terminal it spawned), and Hyprland must actually be on
+# PATH — a no-op on headless boxes, which never install it.
+#
+# start-hyprland, not bare Hyprland: Hyprland >= 0.53 logs "launched without
+# start-hyprland. This is highly advised against" otherwise. It is the
+# supervisor wrapper the package ships, so prefer it and fall back to the raw
+# binary on older installs that predate it.
+if [[ -z "$WAYLAND_DISPLAY" && "$(tty)" == "/dev/tty1" ]] && command -v Hyprland >/dev/null 2>&1; then
+  if command -v start-hyprland >/dev/null 2>&1; then
+    exec start-hyprland
+  fi
+  exec Hyprland
+fi

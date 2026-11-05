@@ -21,9 +21,13 @@
       ignoreSpace = true;
       share = true;
       extended = true;
+      append = true;
     };
 
     shellAliases = {
+      # Override the eza integration's defaults; `command` skips its options alias.
+      ll = "eza -lah";
+      lss = "command eza";
       cat = "bat --paging=never --style=plain";
       ff = "fastfetch";
       poke = "pokeget random --hide-name | fastfetch --file-raw -";
@@ -35,6 +39,10 @@
       c = "clear";
       python = "python3";
     };
+
+    # Home-manager generates .zprofile whether or not this is set, so anything
+    # not carried here is lost on activation.
+    profileExtra = builtins.readFile ./zsh/zprofile.zsh;
 
     # Belt and braces: Debian/Ubuntu zsh reads /etc/zsh/*, not the /etc/zshrc the
     # Nix installer patches, so make sure the Nix profile is on PATH.
@@ -68,6 +76,8 @@
 
         ${builtins.readFile ./zsh/vi-mode.zsh}
         ${builtins.readFile ./zsh/keyseq.zsh}
+        ${builtins.readFile ./zsh/functions.zsh}
+        ${builtins.readFile ./zsh/integrations.zsh}
       ''
       # After vi-mode.zsh: autopair binds Backspace, which that file also sets.
       # fzf-tab also has to follow fzf (910), which rebinds Tab, and precede
@@ -95,7 +105,7 @@
         # replayed snapshot, printing a warning before each command.
         if [[ -n "$CLAUDECODE" ]]; then
           unset RIPGREP_CONFIG_PATH
-          unalias ls ll la lt lla cat grep find 2>/dev/null
+          unalias ls lss ll la lt lla cat grep find 2>/dev/null
           export _ZO_DOCTOR=0
         fi
 
@@ -120,8 +130,17 @@
       if [[ $- == *i* && -z "$ZSH_VERSION" && -z "$NO_ZSH" ]] && command -v zsh >/dev/null 2>&1; then
         if shopt -q login_shell; then exec zsh -l; else exec zsh; fi
       fi
+
+      # Only reached when the handoff above didn't happen.
+      alias ls='ls --color=auto'
+      alias grep='grep --color=auto'
+      PS1='[\u@\h \W]\$ '
     '';
   };
+
+  # Not programs.fish: that would install fish on every node, and write the
+  # config.fish the end-4 installer owns on the desktop. See the file's header.
+  xdg.configFile."fish/conf.d/dotfiles.fish".source = ./fish/dotfiles.fish;
 
   programs.starship = {
     enable = true;
