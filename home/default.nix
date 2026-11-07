@@ -1,17 +1,4 @@
 { pkgs, ... }:
-let
-  # nixpkgs has the wrong node_modules hash for opencode 2.2.5, so it fails to
-  # build. Only applies to that version; delete once nixpkgs has moved past it.
-  opencode =
-    if pkgs.opencode.version == "2.2.5" then
-      pkgs.opencode.overrideAttrs (old: {
-        node_modules = old.node_modules.overrideAttrs {
-          outputHash = "sha256-prx9dX7kUvs/E3zopkaPk5LXh3xJAy5sZeum/W8L7cA=";
-        };
-      })
-    else
-      pkgs.opencode;
-in
 {
   imports = [
     ./shell.nix
@@ -20,6 +7,7 @@ in
     ./fastfetch.nix
     ./git.nix
     ./nvim.nix
+    ./opencode.nix
   ];
 
   home.stateVersion = "26.05";
@@ -38,8 +26,7 @@ in
   home.packages = with pkgs; [
     pokeget-rs
 
-    # agents and automation
-    opencode
+    # automation
     ansible
 
     # git
